@@ -1,0 +1,556 @@
+---
+title: "Final Project"
+author: "Capt Guadalupe Hernandez"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document:
+    keep_tex: true
+geometry: margin=1in
+fontsize: 10pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, results='hold', echo=FALSE, warning = FALSE, message=FALSE}
+library(ggplot2)
+library(car)
+library(kableExtra)
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(patchwork)
+library(NSM3)
+library(MASS)
+library(cowplot)
+library(reshape)
+library(Sleuth3)
+library(Hmisc)
+library(truncnorm) 
+options(digits = 10)
+```
+
+## Reproducing the Simulation
+```{r, results='hold'}
+compute_lambda_star = function(aA, bA, aB, bB, 
+                               nA, nB, piA, piB, 
+                               d, rho, Nsim = 5000) {
+  
+  # Generate observed trial data
+  SA = rbinom(1, nA, piA)
+  SB = rbinom(1, nB, piB)
+  
+  # Posterior sampling
+  pA = rbeta(Nsim, aA + SA, bA + nA - SA)
+  pB = rbeta(Nsim, aB + SB, bB + nB - SB)
+  
+  # Calc the diff of the posterior samples
+  diff = pA - pB
+  
+  # Probability of Superiority (A > B + d)
+  p_corr_star = mean(diff > d)
+  
+  # Probability of Ambiguity (-d <= A - B <= d)
+  p_amb_star = mean(diff >= -d & diff <= d)
+  
+  # Composite decision index for Treatment A
+  lambda_star_A = p_corr_star + (rho * p_amb_star)
+  
+  return(lambda_star_A)
+}
+```
+
+
+```{r, results='hold'}
+compute_xi = function(lambda_vals, theta = 0.9) {
+  mean(lambda_vals > theta)
+}
+```
+
+
+```{r, results='hold'}
+run_scenario = function(scenario_name, piA, piB, 
+                        aA_vec, bA_vec, aB_vec, bB_vec, 
+                        n_vals = c(39, 65), d = 0.05, 
+                        rho = 0.5, theta = 0.9, 
+                        n_trials = 5000, Nsim = 5000) {
+  
+  results = data.frame()
+  
+  for (i in seq_along(aA_vec)) {
+    # Store results for each sample size n_vals
+    xi_results = sapply(n_vals, function(n) {
+      # Generate N_trials of lambda_star
+      lambda_samples = replicate(n_trials, {
+        compute_lambda_star(aA_vec[i], bA_vec[i], aB_vec[i], bB_vec[i], 
+                            nA = n, nB = n, piA = piA, piB = piB, 
+                            d = d, rho = rho, Nsim = Nsim)
+      })
+      
+      # Calculate xi
+      return(compute_xi(lambda_samples, theta))
+    })
+    
+    # Append to results data frame
+    results = rbind(results, data.frame(scenario  = scenario_name,
+                                        prior_set = i,
+                                        prior_A   = paste0("(", aA_vec[i], ",", bA_vec[i], ")"),
+                                        prior_B   = paste0("(", aB_vec[i], ",", bB_vec[i], ")"),
+                                        xi_39     = 100 * xi_results[1],
+                                        xi_65     = 100 * xi_results[2]))
+  }
+  
+  return(results)
+}
+```
+
+
+```{r, results='hold'}
+# Set seed
+set.seed(123)
+
+scenario_1_1 = run_scenario(scenario_name = "1.1",
+                            piA = 0.30, piB = 0.15,
+                            aA_vec = 1,
+                            bA_vec = 1,
+                            aB_vec = 1,
+                            bB_vec = 1,
+                            d = 0.05,
+                            rho = 0.5)
+```
+
+
+```{r, results='hold'}
+# Set seed
+set.seed(123)
+
+scenario_1_2 = run_scenario(scenario_name = "1.2",
+                            piA = 0.30, piB = 0.15,
+                            aA_vec = c(3, 6, 9, 12, 15),
+                            bA_vec = c(7, 14, 21, 28, 35),
+                            aB_vec = c(2, 3, 5, 6, 8),
+                            bB_vec = c(8, 17, 25, 34, 42),
+                            d = 0.05,
+                            rho = 0.5)
+```
+
+
+```{r, results='hold'}
+# Set seed
+set.seed(123)
+
+scenario_1_3 = run_scenario(scenario_name = "1.3",
+                            piA = 0.30, piB = 0.15,
+                            aA_vec = c(3, 6, 9, 12, 15),
+                            bA_vec = c(7, 14, 21, 28, 35),
+                            aB_vec = c(2, 4, 6, 8, 10),
+                            bB_vec = c(8, 16, 24, 32, 40),
+                            d = 0.05,
+                            rho = 0.5)
+```
+
+
+```{r, results='hold'}
+# Set seed
+set.seed(123)
+
+scenario_1_4 = run_scenario(scenario_name = "1.4",
+                            piA = 0.30, piB = 0.15,
+                            aA_vec = c(3, 6, 9, 12, 15),
+                            bA_vec = c(7, 14, 21, 28, 35),
+                            aB_vec = c(1, 2, 3, 4, 5),
+                            bB_vec = c(9, 18, 27, 36, 45),
+                            d = 0.05,
+                            rho = 0.5)
+```
+
+
+```{r, results='hold'}
+# Set seed
+set.seed(123)
+
+scenario_1_5 = run_scenario(scenario_name = "1.5",
+                            piA = 0.30, piB = 0.15,
+                            aA_vec = c(5, 10, 15, 20, 25),
+                            bA_vec = c(5, 10, 15, 20, 25),
+                            aB_vec = c(4, 7, 11, 14, 18),
+                            bB_vec = c(6, 13, 19, 26, 32),
+                            d = 0.05,
+                            rho = 0.5)
+```
+
+
+```{r, results='hold'}
+# Set seed
+set.seed(123)
+
+all_results = rbind(scenario_1_1,
+                    scenario_1_2,
+                    scenario_1_3,
+                    scenario_1_4,
+                    scenario_1_5)
+
+print(all_results)
+write.csv(all_results, "sim_results.csv", row.names = FALSE)
+```
+
+## Proposed Extension
+
+```{r}
+# Updated simulation incorporating the Cost Ratio
+run_scenario_extension = function(scenario_name, piA, piB, 
+                                   aA_vec, bA_vec, aB_vec, bB_vec, 
+                                   cost_ratios = c(4, 6, 9), # ratios
+                                   n_vals = c(39, 65), d = 0.05, 
+                                   rho = 0.5, n_trials = 5000, Nsim = 5000) {
+  
+  results = data.frame()
+  
+  for (i in seq_along(aA_vec)) {
+    for (ratio in cost_ratios) {
+      # Calculate formal Bayesian threshold
+      theta = ratio / (1 + ratio)
+      
+      xi_results = sapply(n_vals, function(n) {
+        lambda_samples = replicate(n_trials, {
+          compute_lambda_star(aA_vec[i], bA_vec[i], aB_vec[i], bB_vec[i], 
+                              nA = n, nB = n, piA = piA, piB = piB, 
+                              d = d, rho = rho, Nsim = Nsim)
+        })
+        return(compute_xi(lambda_samples, theta))
+      })
+      
+      results = rbind(results, data.frame(
+        scenario  = scenario_name,
+        cost_ratio = ratio,
+        threshold = round(theta, 2),
+        prior_A   = paste0("(", aA_vec[i], ",", bA_vec[i], ")"),
+        prior_B   = paste0("(", aB_vec[i], ",", bB_vec[i], ")"),
+        xi_39     = 100 * xi_results[1],
+        xi_65     = 100 * xi_results[2]
+      ))
+    }
+  }
+  return(results)
+}
+```
+
+
+```{r}
+# Set the global seed
+set.seed(123)
+
+results_ext = run_scenario_extension(scenario_name = "Extended 1.1",
+                                     piA = 0.30, piB = 0.15,
+                                     aA_vec = c(1), bA_vec = c(1),
+                                     aB_vec = c(1), bB_vec = c(1))
+print(results_ext)
+```
+
+
+```{r}
+results_ext2 = run_scenario_extension(scenario_name = "Extended 1.2",
+                                     piA = 0.30, piB = 0.15,
+                                     aA_vec = c(3, 6, 9, 12, 15), bA_vec = c(7, 14, 21, 28, 35),
+                                     aB_vec = c(2, 3, 5, 6, 8),   bB_vec = c(8, 17, 25, 34, 42))
+
+print(results_ext2)
+```
+
+
+```{r}
+results_ext3 = run_scenario_extension(scenario_name = "Extended 1.3",
+                                     piA = 0.30, piB = 0.15,
+                                     aA_vec = c(3, 6, 9, 12, 15), bA_vec = c(7, 14, 21, 28, 35),
+                                     aB_vec = c(2, 4, 6, 8, 10),   bB_vec = c(8, 16, 24, 32, 40))
+
+print(results_ext3)
+```
+
+
+```{r}
+results_ext4 = run_scenario_extension(scenario_name = "Extended 1.4",
+                                     piA = 0.30, piB = 0.15,
+                                     aA_vec = c(3, 6, 9, 12, 15), bA_vec = c(7, 14, 21, 28, 35),
+                                     aB_vec = c(1, 2, 3, 4, 5),   bB_vec = c(9, 18, 27, 36, 45))
+
+print(results_ext4)
+```
+
+
+```{r}
+results_ext5 = run_scenario_extension(scenario_name = "Extended 1.5",
+                                     piA = 0.30, piB = 0.15,
+                                     aA_vec = c(5, 10, 15, 20, 25), bA_vec = c(5, 10, 15, 20, 25),
+                                     aB_vec = c(4, 7, 11, 14, 18),   bB_vec = c(6, 13, 19, 26, 32))
+
+print(results_ext5)
+```
+
+
+```{r, results='hold'}
+ext_results = rbind(results_ext,
+                    results_ext2,
+                    results_ext3,
+                    results_ext4,
+                    results_ext5)
+
+print(ext_results)
+write.csv(ext_results, "ext_results.csv", row.names = FALSE)
+```
+
+## T Arm Treatment Extension
+
+```{r}
+# Function to get utilities for all arms in one trial
+get_all_trial_utilities = function(pi_vec, n_vec, a_vec, b_vec, d, rho, Nsim) {
+  # Generate outcomes for all arms
+  S_vec = rbinom(length(pi_vec), n_vec, pi_vec)
+  
+  # Sample from all posteriors
+  post_samples = matrix(NA, nrow = Nsim, ncol = length(pi_vec))
+  for(i in 1:length(pi_vec)) {
+    post_samples[, i] = rbeta(Nsim, a_vec[i] + S_vec[i], b_vec[i] + n_vec[i] - S_vec[i])
+  }
+  
+  # Calculate all pairwise utilities (lambda_jk)
+  # This returns a K x K matrix of lambda values
+  K = length(pi_vec)
+  lambda_matrix = matrix(0, K, K)
+  
+  for(j in 1:K) {
+    for(k in 1:K) {
+      if(j != k) {
+        diff = post_samples[, j] - post_samples[, k]
+        lambda_matrix[j, k] = mean(diff > d) + (rho * mean(abs(diff) <= d))
+      }
+    }
+  }
+  
+  # Calculate U_j = average utility against all k != j
+  U_vec = rowSums(lambda_matrix) / (K - 1)
+  return(U_vec)
+}
+```
+
+
+```{r}
+select_treatment = function(U_vec) {
+  which.max(U_vec)
+}
+```
+
+### Runs
+
+(Base-case) Weak prior
+
+```{r}
+# Parameters for a 3-arm trial
+pi_vec = c(0.25, 0.30, 0.20)
+n_vec  = c(65, 65, 65)
+a_vec  = c(1, 1, 1)
+b_vec  = c(1, 1, 1)
+```
+
+
+```{r}
+set.seed(123)
+
+# Run the simulation 10,000 times
+trial_choices = replicate(10000, {
+  # Get utilities for all arms
+  U_vec = get_all_trial_utilities(pi_vec, n_vec, a_vec, b_vec, 
+                                   d = 0.05, rho = 0.5, Nsim = 5000)
+  
+  # Select treatment
+  select_treatment(U_vec)
+})
+
+# Summarize results
+# Calculate probability of selecting each arm
+table(trial_choices) / 10000
+```
+
+
+(Scenario A) Prior means correctly specified
+
+```{r}
+# Parameters for a 3-arm trial
+pi_vec = c(0.25, 0.30, 0.20)
+n_vec  = c(65, 65, 65)
+a_vec  = c(1, 3, 2)
+b_vec  = c(3, 7, 8)
+```
+
+
+```{r}
+set.seed(123)
+
+# Run the simulation 10,000 times
+trial_choices = replicate(10000, {
+  # Get utilities for all arms
+  U_vec = get_all_trial_utilities(pi_vec, n_vec, a_vec, b_vec, 
+                                   d = 0.05, rho = 0.5, Nsim = 5000)
+  
+  # Select treatment
+  select_treatment(U_vec)
+})
+
+# Summarize results
+# Calculate probability of selecting each arm
+table(trial_choices) / 10000
+```
+
+
+(Scenario B) Moderately misspecified but highly informative prior specification
+
+```{r}
+# Parameters for a 3-arm trial
+pi_vec = c(0.25, 0.30, 0.20)
+n_vec  = c(65, 65, 65)
+a_vec  = c(12, 3, 8)
+b_vec  = c(28, 7, 32)
+```
+
+
+```{r}
+set.seed(123)
+
+# Run the simulation 10,000 times
+trial_choices = replicate(10000, {
+  # Get utilities for all arms
+  U_vec = get_all_trial_utilities(pi_vec, n_vec, a_vec, b_vec, 
+                                   d = 0.05, rho = 0.5, Nsim = 5000)
+  
+  # Select treatment
+  select_treatment(U_vec)
+})
+
+# Summarize results
+# Calculate probability of selecting each arm
+table(trial_choices) / 10000
+```
+
+(Scenario C) Strongly informative and systematically misspecified prior specification
+
+```{r}
+# Parameters for a 3-arm trial
+pi_vec = c(0.25, 0.30, 0.20)
+n_vec  = c(65, 65, 65)
+a_vec  = c(20, 3, 18)
+b_vec  = c(20, 7, 32)
+```
+
+
+```{r}
+set.seed(123)
+
+# Run the simulation 10,000 times
+trial_choices = replicate(10000, {
+  # Get utilities for all arms
+  U_vec = get_all_trial_utilities(pi_vec, n_vec, a_vec, b_vec, 
+                                   d = 0.05, rho = 0.5, Nsim = 5000)
+  
+  # Select treatment
+  select_treatment(U_vec)
+})
+
+# Summarize results
+# Calculate probability of selecting each arm
+table(trial_choices) / 10000
+```
+
+
+(D) Reversed / Imbalanced prior specification with strong anchoring on the best-performing arm
+
+```{r}
+# Parameters for a 3-arm trial
+pi_vec = c(0.25, 0.30, 0.20)
+n_vec  = c(65, 65, 65)
+a_vec  = c(2, 15, 3)
+b_vec  = c(8, 35, 17)
+```
+
+
+```{r}
+set.seed(123)
+
+# Run the simulation 10,000 times
+trial_choices = replicate(10000, {
+  # Get utilities for all arms
+  U_vec = get_all_trial_utilities(pi_vec, n_vec, a_vec, b_vec, 
+                                   d = 0.05, rho = 0.5, Nsim = 5000)
+  
+  # Select treatment
+  select_treatment(U_vec)
+})
+
+# Summarize results
+# Calculate probability of selecting each arm
+table(trial_choices) / 10000
+```
+
+
+
+### 4 arm trials
+
+(Scenario A) Prior means correctly specified
+
+```{r}
+# Parameters for a 4-arm trial
+pi_vec = c(0.25, 0.30, 0.20, 0.1)
+n_vec  = c(65, 65, 65, 65, 65)
+a_vec  = c(1, 3, 2, 1)
+b_vec  = c(3, 7, 8, 9)
+```
+
+
+```{r}
+set.seed(123)
+
+# Run the simulation 10,000 times
+trial_choices = replicate(10000, {
+  # Get utilities for all arms
+  U_vec = get_all_trial_utilities(pi_vec, n_vec, a_vec, b_vec, 
+                                   d = 0.05, rho = 0.5, Nsim = 5000)
+  
+  # Select treatment
+  select_treatment(U_vec)
+})
+
+# Summarize results
+# Calculate probability of selecting each arm
+table(trial_choices) / 10000
+```
+
+
+### Stress test
+
+```{r}
+# Parameters for a 3-arm trial
+pi_vec = c(0.15, 0.15, 0.15)
+n_vec  = c(65, 65, 65)
+a_vec  = c(3, 3, 3)
+b_vec  = c(17, 17, 17)
+```
+
+```{r}
+set.seed(123)
+
+# Run the simulation 10,000 times
+trial_choices = replicate(10000, {
+  # Get utilities for all arms
+  U_vec = get_all_trial_utilities(pi_vec, n_vec, a_vec, b_vec, 
+                                   d = 0.05, rho = 0.5, Nsim = 5000)
+  
+  # Select treatment 
+  select_treatment(U_vec)
+})
+
+# Summarize results
+# Calculate probability of selecting each arm
+table(trial_choices) / 10000
+```
+
+
